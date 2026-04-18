@@ -46,10 +46,6 @@ def extract_report(user_response_text): # функция для работы д�
 
 date, time = d.get_internet_time()
 hidden = f"\n {date} {time} "
-
-prompt = "дай отчет"
-
-net_info = n.get_web_info(prompt + hidden)
 currency_kg = n.get_currency()
 
 def start_markus():
