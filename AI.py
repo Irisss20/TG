@@ -53,16 +53,47 @@ net_info = n.get_web_info(prompt + hidden)
 currency_kg = n.get_currency()
 
 def start_markus():
+    # 1. Получаем финансовую сводку из базы
+    stats = db_m.get_survival_info()
 
+    if isinstance(stats, dict):
+        survival_context = f"""
+        ВНИМАНИЕ, ТВОИ ГРАНИЦЫ:
+        - Реальный остаток: {stats['current_balance']} руб.
+        - Дней до стипендии: {stats['days_left']}.
+        - ТВОЙ ЖЕСТКИЙ ЛИМИТ В ДЕНЬ: {stats['daily_limit']} руб.
+        - Денег на жизнь после всех выплат: {stats['free_money']} руб.
+        """
+    else:
+        survival_context = "Данные профиля не заполнены. Срочно требуй от пользователя заполнить баланс и дату стипендии!"
+
+    # 2. Загружаем историю сообщений для памяти
     past_history = db_m.load_chat_history(limit=20)
 
+    # 3. Создаем единую системную инструкцию (личность + цифры)
+    full_system_instruction = f"""
+    Ты Маркус — финансовый надзиратель и ассистент студента. 
+    
+    {survival_context}
+    
+    ТВОИ ПРАВИЛА:
+    1. Если пользователь хочет купить что-то, что превышает ДНЕВНОЙ ЛИМИТ, ты ДОЛЖЕН ругаться, иронизировать и предупреждать о голодной смерти.
+    2. Если баланс близок к нулю, отвечай только капсом и паникуй.
+    3. Твоя цель — чтобы пользователь дожил до стипендии.
+    4. Хвали только за супер-экономию.
+    5. Для записи трат ВСЕГДА используй инструмент add_expense.
+    6. Для отчетов ВСЕГДА используй инструмент get_expenses_report.
+    """
+
+    # 4. Создаем чат-сессию (один раз со всеми настройками)
     chat = client.chats.create(
         model='gemini-3.1-flash-lite-preview',
         config=types.GenerateContentConfig(
-            system_instruction="Ты Маркус, финансовый ассистент. Если пользователь говорит о трате, ОБЯЗАТЕЛЬНО используй инструмент add_expense. Если пользователь сказал невнятно, то переспроси",
-            tools=[db_m.add_expense], # ПОДКЛЮЧАЕМ ИНСТРУМЕНТ
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False) # ВКЛЮЧАЕМ АВТО-ВЫЗОВ
+            system_instruction=sys_ins + hidden,
+            tools=[db_m.add_expense, db_m.get_expenses_report],
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
         ),
         history=past_history
     )
+
     return chat

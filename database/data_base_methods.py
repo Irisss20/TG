@@ -1,9 +1,104 @@
 import sqlite3
 import os
+import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_NAME = os.path.join(BASE_DIR, "database", "../student_finances.db")
 
+from datetime import datetime
+
+def get_survival_info():
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # 1. Берем данные профиля
+    cursor.execute('SELECT balance, income_date, mandatory_payments, planned_expenses FROM user_profile LIMIT 1')
+    profile = cursor.fetchone()
+
+    # 2. Берем сумму уже совершенных трат из таблицы expenses
+    cursor.execute('SELECT SUM(amount) FROM expenses')
+    total_spent = cursor.fetchone()[0] or 0
+    conn.close()
+
+    if not profile:
+        return "Профиль не заполнен. Вызови /start"
+
+    initial_balance, income_date_str, mandatory, planned = profile
+
+    # ТЕКУЩИЙ РЕАЛЬНЫЙ БАЛАНС (за вычетом того, что уже потратили)
+    current_balance = initial_balance - total_spent
+
+    # СВОБОДНЫЕ ДЕНЬГИ (минус обязательные платежи и планы)
+    free_money = current_balance - mandatory - planned
+
+    # СЧИТАЕМ ДНИ ДО СТИПЕНДИИ
+    # Допустим, income_date_str это просто число месяца (например "25")
+    today = datetime.now()
+    try:
+        income_day = int(income_date_str)
+        if income_day > today.day:
+            days_left = income_day - today.day
+        else:
+            # Если день уже прошел в этом месяце, значит стипа в следующем
+            days_left = 30 - today.day + income_day
+    except:
+        days_left = 7 # Заглушка, если дата кривая
+
+    # ДНЕВНОЙ ЛИМИТ
+    daily_limit = free_money / days_left if days_left > 0 else free_money
+
+    return {
+        "current_balance": round(current_balance, 2),
+        "days_left": days_left,
+        "daily_limit": round(daily_limit, 2),
+        "free_money": round(free_money, 2)
+    }
+
+
+def get_expenses_report(category: str = None, month: int = None) -> str:
+    """
+    Получает отчет по расходам.
+    Можно фильтровать по категории и по номеру месяца.
+
+    category: Название категории (Еда, Транспорт и т.д.)
+    month: Номер месяца (1-12), за который нужен отчет.
+    """
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+
+        # Базовый запрос
+        query = "SELECT SUM(amount) FROM expenses WHERE 1=1"
+        params = []
+
+        # Добавляем фильтр по категории, если она есть
+        if category:
+            query += " AND category = ?"
+            params.append(category)
+
+        # Добавляем фильтр по месяцу (используем встроенную функцию SQLite strftime)
+        if month:
+            # Превращаем число месяца в формат '01', '02' и т.д.
+            month_str = f"{month:02d}"
+            query += " AND strftime('%m', date) = ?"
+            params.append(month_str)
+
+        cursor.execute(query, params)
+        total = cursor.fetchone()[0]
+        conn.close()
+
+        # Формируем человечный ответ для Маркуса
+        msg = "Твой отчет:"
+        if month: msg += f" за {month}-й месяц"
+        if category: msg += f" в категории '{category}'"
+
+        if total:
+            return f"{msg}: {total} сом."
+        else:
+            return f"{msg}: данных пока нет."
+
+    except Exception as e:
+        return f"Ошибка при расчете отчета: {e}"
 
 def add_expense(amount: float, category: str, desc: str) -> str:
     """
@@ -14,7 +109,7 @@ def add_expense(amount: float, category: str, desc: str) -> str:
     desc: краткое описание покупки
     """
     try:
-        conn = sqlite3.connect('database/student_finances.db')
+        conn = sqlite3.connect(DB_NAME)
         cursor = conn.cursor()
         cursor.execute('INSERT INTO expenses (amount, category, desc) VALUES (?, ?, ?)',
                        (amount, category, desc))
