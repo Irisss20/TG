@@ -7,6 +7,53 @@ DB_NAME = os.path.join(BASE_DIR, "database", "../student_finances.db")
 
 from datetime import datetime
 
+import sqlite3
+
+
+def update_user_field(field_name: str, value):
+    """
+    Универсальный метод для обновления ОДНОГО поля в профиле.
+    field_name: имя колонки (balance, planned_expenses и т.д.)
+    value: новое значение
+    """
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+
+    # Сначала проверим, есть ли вообще строка в базе
+    cursor.execute('SELECT COUNT(*) FROM user_profile')
+    if cursor.fetchone()[0] == 0:
+        # Если базы нет, создаем пустую строку с нулями
+        cursor.execute('INSERT INTO user_profile (balance, income_date, income_amount, planned_expenses, mandatory_payments) VALUES (0, "", 0, 0, 0)')
+
+    # Обновляем конкретное поле (используем f-строку только для имени колонки,
+    # так как его передаем мы сами, а значение — через безопасный '?')
+    query = f"UPDATE user_profile SET {field_name} = ?"
+    cursor.execute(query, (value,))
+
+    conn.commit()
+    conn.close()
+    return f"Поле {field_name} успешно обновлено на {value}"
+
+# А теперь создаем обертки-инструменты для Маркуса:
+
+def update_balance(amount: float):
+    """Обновляет только текущий баланс пользователя."""
+    return update_user_field('balance', amount)
+
+def update_planned_expenses(amount: float):
+    """Обновляет только сумму запланированных трат."""
+    return update_user_field('planned_expenses', amount)
+
+def update_income(amount: float, date: str):
+    """Обновляет данные о следующем доходе (сумму и дату)."""
+    # Тут обновляем два поля сразу
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('UPDATE user_profile SET income_amount = ?, income_date = ?', (amount, date))
+    conn.commit()
+    conn.close()
+    return f"Доход обновлен: {amount} сом, дата: {date}"
+
 def get_survival_info():
     conn = sqlite3.connect(DB_NAME)
     cursor = conn.cursor()

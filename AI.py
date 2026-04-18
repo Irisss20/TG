@@ -32,7 +32,7 @@ def extract_report(user_response_text): # функция для работы д�
     """
 
     response = client.models.generate_content(
-        model='gemini-3.1-flash-lite-preview',
+        model='gemini-3-flash-preview',
         config=types.GenerateContentConfig(
             response_mime_type="application/json" # ГАРАНТИЯ ЧИСТОГО JSON
         ),
@@ -86,7 +86,13 @@ def start_markus():
         model='gemini-3.1-flash-lite-preview',
         config=types.GenerateContentConfig(
             system_instruction=sys_ins + hidden,
-            tools=[db_m.add_expense, db_m.get_expenses_report],
+            tools=[
+                db_m.update_balance,
+                db_m.update_planned_expenses,
+                db_m.update_income,
+                db_m.add_expense,
+                db_m.get_expenses_report
+            ],
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
         ),
         history=past_history
